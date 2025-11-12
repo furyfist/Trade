@@ -1,10 +1,5 @@
-# TradeSenti AI: Hybrid ML/LLM Financial Analysis Engine
+# TradeSenpai: Financial Analysis Engine
 
-[](https://www.python.org/downloads/)
-[](https://fastapi.tiangolo.com/)
-[](https://ai.google.dev/)
-[](https://www.tensorflow.org/)
-[](https://www.mongodb.com/)
 
 TradeSage AI is a sophisticated hybrid decision engine that transforms raw trading ideas and live market data into precise, interpretable forecasts. It uses a custom-trained **LSTM neural network** for quantitative forecasting and a **6-step Generative AI (Gemini) pipeline** for qualitative reasoning and risk assessment.
 
