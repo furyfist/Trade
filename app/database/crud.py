@@ -1,115 +1,125 @@
-from .database import get_hypotheses_collection
+from .database import get_supabase
 from typing import Dict, Any, List, Optional
-from bson import ObjectId
 from datetime import datetime
 
-# Note: We don't need models.py because MongoDB is schemaless.
-# Our "schema" is the JSON object returned by the orchestrator.
-
-# REMOVED 'async'
 def create_hypothesis_analysis(analysis_data: Dict[str, Any]) -> str:
     """
-    Saves the *entire* analysis object from the orchestrator as one document.
+    Saves the analysis object to the 'hypotheses' table in Supabase.
     """
-    collection = get_hypotheses_collection()
-    if collection is None:
+    client = get_supabase()
+    if client is None:
         raise Exception("Database not connected.")
         
-    # Add a timestamp to the root of the document
-    analysis_data["created_at"] = datetime.utcnow()
+    # Prepare the record for insertion
+    # We map the complex nested dictionaries to JSONB columns
+    record = {
+        "processed_hypothesis": analysis_data.get("processed_hypothesis"),
+        "confidence_score": analysis_data.get("confidence_score"),
+        "synthesis": analysis_data.get("synthesis"),
+        "status": analysis_data.get("status"),
+        "original_hypothesis": analysis_data.get("original_hypothesis"),
+        "method": analysis_data.get("method"),
+        
+        # JSONB fields
+        "context": analysis_data.get("context", {}),
+        "research_data": analysis_data.get("research_data", {}),
+        "contradictions": analysis_data.get("contradictions", []),
+        "confirmations": analysis_data.get("confirmations", []),
+        "alerts": analysis_data.get("alerts", [])
+    }
     
-    # REMOVED 'await'
-    result = collection.insert_one(analysis_data)
+    # Execute insert and return the new ID
+    response = client.table("hypotheses").insert(record).execute()
     
-    # Return the string ID of the new document
-    return str(result.inserted_id)
+    if response.data and len(response.data) > 0:
+        return response.data[0]["id"]
+    else:
+        raise Exception("Failed to insert hypothesis.")
 
-# REMOVED 'async'
 def get_all_hypotheses_summary() -> List[Dict[str, Any]]:
     """
-    Gets a lightweight summary for all hypotheses for the dashboard.
-    This replaces the complex DashboardCRUD from the original.
+    Gets a summary of recent hypotheses for the dashboard.
     """
-    collection = get_hypotheses_collection()
-    if collection is None:
+    client = get_supabase()
+    if client is None:
         raise Exception("Database not connected.")
         
+    # Select specific fields and order by created_at desc
+    response = client.table("hypotheses").select(
+        "id, processed_hypothesis, confidence_score, synthesis, contradictions, confirmations, status, context, created_at"
+    ).order("created_at", desc=True).limit(50).execute()
+    
     summaries = []
     
-    cursor = collection.find(
-        {}, 
-        {
-            "processed_hypothesis": 1, 
-            "confidence_score": 1, 
-            "synthesis": 1,
-            "contradictions": 1,
-            "confirmations": 1,
-            "status": 1,
-            "context.primary_symbol": 1, # Get nested symbol
-            "created_at": 1
+    for row in response.data:
+        # Prepare list fields
+        contradictions_list = row.get("contradictions", [])
+        confirmations_list = row.get("confirmations", [])
+        
+        # Determine confidence percentage
+        confidence_val = row.get("confidence_score")
+        confidence_pct = round(confidence_val * 100) if confidence_val is not None else 50
+        
+        # Get primary symbol from nested JSON context
+        # Supabase returns the JSON object directly for JSONB columns
+        context_data = row.get("context") or {}
+        primary_symbol = context_data.get("primary_symbol")
+        
+        # Transform for frontend
+        summary = {
+            "_id": row["id"], # Keep _id for frontend compatibility if needed, or update frontend to use id
+            "id": row["id"],
+            "title": row.get("processed_hypothesis", "Untitled Hypothesis"),
+            "status": row.get("status"),
+            "confidence": confidence_pct,
+            "confidence_score": confidence_val,
+            "synthesis": row.get("synthesis"),
+            
+            # Counts
+            "contradictions": len(contradictions_list) if isinstance(contradictions_list, list) else 0,
+            "confirmations": len(confirmations_list) if isinstance(confirmations_list, list) else 0,
+            
+            # Details
+            "contradictions_detail": contradictions_list if isinstance(contradictions_list, list) else [],
+            "confirmations_detail": confirmations_list if isinstance(confirmations_list, list) else [],
+            
+            # Context
+            "context": {"primary_symbol": primary_symbol} if primary_symbol else {},
+            "created_at": row.get("created_at")
         }
-    ).sort("created_at", -1).limit(50) # Get last 50
-    
-    # REMOVED 'async for'
-    for doc in cursor:
-        doc["_id"] = str(doc["_id"]) # Convert Mongo's ObjectId to a string
-        
-        # Transform data for frontend compatibility
-        # Convert confidence_score (0-1) to confidence percentage (0-100)
-        if "confidence_score" in doc and doc["confidence_score"] is not None:
-            doc["confidence"] = round(doc["confidence_score"] * 100)
-        else:
-            doc["confidence"] = 50  # Default to 50%
-        
-        # Count contradictions and confirmations
-        contradictions_list = doc.get("contradictions", [])
-        confirmations_list = doc.get("confirmations", [])
-        
-        doc["contradictions"] = len(contradictions_list) if isinstance(contradictions_list, list) else 0
-        doc["confirmations"] = len(confirmations_list) if isinstance(confirmations_list, list) else 0
-        
-        # Add detail arrays for frontend
-        doc["contradictions_detail"] = contradictions_list if isinstance(contradictions_list, list) else []
-        doc["confirmations_detail"] = confirmations_list if isinstance(confirmations_list, list) else []
-        
-        # Add title and id for frontend
-        doc["id"] = doc["_id"]
-        doc["title"] = doc.get("processed_hypothesis", "Untitled Hypothesis")
         
         # Format lastUpdated
-        if "created_at" in doc and doc["created_at"]:
-            if isinstance(doc["created_at"], datetime):
-                doc["lastUpdated"] = doc["created_at"].strftime("%Y-%m-%d %H:%M")
-            else:
-                doc["lastUpdated"] = "Recently"
+        if row.get("created_at"):
+            try:
+                dt = datetime.fromisoformat(row["created_at"].replace('Z', '+00:00'))
+                summary["lastUpdated"] = dt.strftime("%Y-%m-%d %H:%M")
+            except:
+                summary["lastUpdated"] = "Recently"
         else:
-            doc["lastUpdated"] = "Recently"
-        
-        summaries.append(doc)
+            summary["lastUpdated"] = "Recently"
+            
+        summaries.append(summary)
         
     return summaries
 
-# REMOVED 'async'
 def get_hypothesis_by_id(hypothesis_id: str) -> Optional[Dict[str, Any]]:
     """
-    Get a single, complete analysis document by its Mongo ID.
+    Get a single complete hypothesis by UUID.
     """
-    collection = get_hypotheses_collection()
-    if collection is None:
+    client = get_supabase()
+    if client is None:
         raise Exception("Database not connected.")
         
     try:
-        # Convert the string ID back to a BSON ObjectId for querying
-        oid = ObjectId(hypothesis_id)
-    except Exception:
-        print(f"Invalid ID format: {hypothesis_id}")
-        return None
+        response = client.table("hypotheses").select("*").eq("id", hypothesis_id).single().execute()
+        doc = response.data
         
-    # REMOVED 'await'
-    doc = collection.find_one({"_id": oid})
+        if doc:
+            doc["_id"] = doc["id"] # Compatibility
+            return doc
+            
+    except Exception as e:
+        print(f"Error fetching hypothesis {hypothesis_id}: {e}")
+        return None
     
-    if doc:
-        # Convert _id to string for JSON responses
-        doc["_id"] = str(doc["_id"]) 
-    
-    return doc
+    return None

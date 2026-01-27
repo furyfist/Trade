@@ -1,52 +1,35 @@
-from pymongo import MongoClient
-from pymongo.database import Database
-from pymongo.collection import Collection
-from app.core.config import MONGO_CONNECTION_STRING, MONGO_DB_NAME
+from supabase import create_client, Client
+from app.core.config import SUPABASE_URL, SUPABASE_KEY
 
 # This class will hold our database connection (as a singleton)
-class MongoConnection:
-    client: MongoClient = None
-    db: Database = None
-    
-    # Collections
-    hypotheses: Collection = None
+class SupabaseConnection:
+    client: Client = None
 
-db_connection = MongoConnection()
+db_connection = SupabaseConnection()
 
-def connect_to_mongo():
+def connect_to_supabase():
     """
-    Connects to the MongoDB database and initializes collections.
+    Connects to Supabase.
     This function should be called once at application startup.
     """
-    print("Connecting to MongoDB...")
+    print("Connecting to Supabase...")
     try:
-        db_connection.client = MongoClient(MONGO_CONNECTION_STRING)
-        db_connection.db = db_connection.client[MONGO_DB_NAME]
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY in environment variables.")
+            
+        db_connection.client = create_client(SUPABASE_URL, SUPABASE_KEY)
         
-        # Get collections
-        db_connection.hypotheses = db_connection.db["hypotheses"]
+        # Verify connection (optional simple query)
+        # db_connection.client.table("hypotheses").select("count", count="exact").execute()
         
-        # Verify connection
-        db_connection.client.admin.command('ping')
-        print(f"Successfully connected to MongoDB, database: '{MONGO_DB_NAME}'.")
+        print(f"Successfully connected to Supabase: {SUPABASE_URL}")
         
     except Exception as e:
-        print(f"--- FAILED TO CONNECT TO MONGODB ---")
+        print(f"--- FAILED TO CONNECT TO SUPABASE ---")
         print(f"Error: {e}")
-        print("Please check your MONGO_CONNECTION_STRING in the .env file.")
         # We'll let the app exit or fail gracefully at startup
         raise
 
-def close_mongo_connection():
-    """Closes the MongoDB connection. Call this at application shutdown."""
-    if db_connection.client:
-        db_connection.client.close()
-        print("MongoDB connection closed.")
-
-def get_db() -> Database:
-    """Helper function to get the database instance."""
-    return db_connection.db
-
-def get_hypotheses_collection() -> Collection:
-    """Helper function to get the main 'hypotheses' collection."""
-    return db_connection.hypotheses
+def get_supabase() -> Client:
+    """Helper function to get the supabase client instance."""
+    return db_connection.client

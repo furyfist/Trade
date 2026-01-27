@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 google-generativeai
-pymongo
+supabase
 python-dotenv
 yfinance
 pandas

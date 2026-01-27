@@ -7,9 +7,9 @@ load_dotenv()
 # --- Google API ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# --- MongoDB ---
-MONGO_CONNECTION_STRING = os.getenv("MONGO_CONNECTION_STRING")
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "tradesage_hackathon_db")
+# --- Supabase ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 

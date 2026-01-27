@@ -4,7 +4,7 @@ from app.database.crud import (
     get_all_hypotheses_summary,
     get_hypothesis_by_id
 )
-from app.database.database import connect_to_mongo, close_mongo_connection
+
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -71,21 +71,19 @@ class FullHypothesis(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    """Connects to MongoDB when the app starts."""
-    connect_to_mongo()
+    """Connects to Supabase when the app starts."""
+    from app.database.database import connect_to_supabase
+    connect_to_supabase()
 
     if orchestrator is None:
         print("--- FATAL: ORCHESTRATOR FAILED TO INITIALIZE ---")
     else:
         print("Application startup complete.")
 
-# This can remain async
-
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Disconnects from MongoDB when the app shuts down."""
-    close_mongo_connection()
+    """Cleanup when the app shuts down."""
     print("Application shutdown complete.")
 
 # --- API Endpoints ---
